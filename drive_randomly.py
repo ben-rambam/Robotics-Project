@@ -6,6 +6,9 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import MultiArrayLayout
 from std_msgs.msg import MultiArrayDimension
+from enum import Enum
+
+State = Enum('State', 'go_away pivot_right go_to pivot_left')
 
 #Float64 for wheel velocities
 rw_vel = 0.0
@@ -17,6 +20,11 @@ beacon_pose = Pose2D()
 beacon_pose.x = 0
 beacon_pose.y = 0
 beacon_pose.theta = -180
+
+front_right_dist = 2.0
+rear_right_dist = 2.0
+r = 0.12
+L = 0.35
 
 #LaserScan information on the robot laserscan taopic
 laser_scan = LaserScan()
@@ -30,21 +38,20 @@ pub = rospy.Publisher(
 def lw_callback(lw_data):
     global lw_vel
     lw_vel = lw_data.data
-    print lw_vel
-
+    #print lw_vel
 
 #Get the sensor reading on the right wheel velocity
 def rw_callback(rw_data):
     global rw_vel
-    rw_vel = lw_data.data
-    print rw_vel
+    rw_vel = rw_data.data
+    #print rw_vel
 
 
 #Read the beacon sensor. If theta is not between -90, 90 degrees beacon is not found
 def beacon_callback(beacon_data):
     global beacon_found, beacon_pose
     #the beacon is not detected if theta is -180
-    print beacon_data.theta
+    #print beacon_data.theta
     if (beacon_data.theta == -180):
         beacon_found = False
         return
@@ -85,7 +92,11 @@ def beacon_callback(beacon_data):
 #Reads in the laser message sent on robot0/laser_0 topic
 def lidar_callback(lidar_data):
     global laser_scan
+    global rear_right_dist, front_right_dist
     laser_scan = lidar_data
+    rear_right_dist = laser_scan.ranges[45]
+    front_right_dist = laser_scan.ranges[135]
+
 
 #print laser_scan.header
 
@@ -103,6 +114,51 @@ def hit_wall():
         else:
             return False
 
+def follow_wall_right():
+    global laser_scan
+    if laser_scan.angle_increment !=0:
+        zero_index = int((0 - laser_scan.angle_min) / laser_scan.angle_increment)
+        rear_index_right = 315
+        forward_index_right = 225
+
+def drive_straight(speed):
+        global r, L
+        w1 = speed
+        w2 = speed
+        data = Float64MultiArray(data=[])
+        data.layout = MultiArrayLayout()
+        data.layout.dim = [MultiArrayDimension()]
+        data.layout.dim[0].label = "Parameters"
+        data.layout.dim[0].size = 4
+        data.layout.dim[0].stride = 1
+        data.data = [w1, w2, r, L]
+        pub.publish(data)
+
+def pivot_left(speed):
+        global r, L
+        w1 = speed
+        w2 = -speed
+        data = Float64MultiArray(data=[])
+        data.layout = MultiArrayLayout()
+        data.layout.dim = [MultiArrayDimension()]
+        data.layout.dim[0].label = "Parameters"
+        data.layout.dim[0].size = 4
+        data.layout.dim[0].stride = 1
+        data.data = [w1, w2, r, L]
+        pub.publish(data)
+
+def pivot_right(speed):
+        global r, L
+        w1 = -speed
+        w2 = speed
+        data = Float64MultiArray(data=[])
+        data.layout = MultiArrayLayout()
+        data.layout.dim = [MultiArrayDimension()]
+        data.layout.dim[0].label = "Parameters"
+        data.layout.dim[0].size = 4
+        data.layout.dim[0].stride = 1
+        data.data = [w1, w2, r, L]
+        pub.publish(data)
 
 def listener():
     global pub
@@ -114,28 +170,57 @@ def listener():
     rospy.Subscriber("/robot0/beacon", Pose2D, beacon_callback)
     rospy.Subscriber("/robot0/laser_0", LaserScan, lidar_callback)
 
+    state = State.go_to
+    rear_max = 1.5
+    front_max = 1.5
+    rear_min = 1.0
+    front_min = 1.0
+    speed = 1
+
     # infinite loop
     while True:
-        speed = 8
-        r = 0.1
-        L = 0.2
-        # while we haven't hit a wall, go straight
-        if hit_wall() != True:
-            w1 = speed
-            w2 = speed
+        
+        if state == State.go_away:
+            if rear_right_dist > rear_max:
+                state = State.pivot_right
+                print "go_away -> pivot_right"
+                print "rear: " 
+                print rear_right_dist
+                print "front: " 
+                print front_right_dist
+            else:
+                drive_straight(speed)
+        elif state == State.pivot_right:
+            if front_right_dist < front_max:
+                state = State.go_to
+                print "pivot_right -> go_to"
+                print "rear: " 
+                print rear_right_dist
+                print "front: " 
+                print front_right_dist
+            else:
+                pivot_right(speed)
+        elif state == State.go_to:
+            if front_right_dist < front_min:
+                state = State.pivot_left
+                print "go_to -> pivot_left"
+                print "rear: " 
+                print rear_right_dist
+                print "front: " 
+                print front_right_dist
+            else:
+                drive_straight(speed)
+        elif state == State.pivot_left:
+            if rear_right_dist < rear_min:
+                state = State.go_away
+                print "pivot_left -> go away"
+                print "rear: " 
+                print rear_right_dist
+                print "front: " 
+                print front_right_dist
+            else:
+                pivot_left(speed)
 
-# while we are hitting a wall, turn left
-        else:
-            w1 = speed
-            w2 = -speed
-        data = Float64MultiArray(data=[])
-        data.layout = MultiArrayLayout()
-        data.layout.dim = [MultiArrayDimension()]
-        data.layout.dim[0].label = "Parameters"
-        data.layout.dim[0].size = 4
-        data.layout.dim[0].stride = 1
-        data.data = [w1, w2, r, L]
-        pub.publish(data)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
