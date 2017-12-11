@@ -25,6 +25,9 @@ beacon_pose.theta = -180
 front_right_dist = 2.0
 rear_right_dist = 2.0
 right_45 = 2.0
+left_45 = 2.0
+rear_left_dist = 2.0
+front_left_dist = 2.0
 r = 0.12
 L = 0.35
 
@@ -94,12 +97,15 @@ def beacon_callback(beacon_data):
 #Reads in the laser message sent on robot0/laser_0 topic
 def lidar_callback(lidar_data):
     global laser_scan
-    global rear_right_dist, front_right_dist
-    global right_45
+    global rear_right_dist, front_right_dist, right_45
+    global rear_left_dist, front_left_dist, left_45
     laser_scan = lidar_data
     rear_right_dist = laser_scan.ranges[85]
     front_right_dist = laser_scan.ranges[95]
     right_45 = laser_scan.ranges[135]
+    rear_left_dist = laser_scan.ranges[275]
+    front_left_dist = laser_scan.ranges[265]
+    left_45 = laser_scan.ranges[210]
 
 
 #print laser_scan.header
@@ -180,6 +186,7 @@ def drive(v,omega):
 def listener():
     global pub
     global right_45, front_right_dist, rear_right_dist
+    global left_45
     #create the node
     rospy.init_node('read_sensors', anonymous=True)
     #create the subscribers
@@ -193,24 +200,44 @@ def listener():
     front_max = 0.7
     rear_min = 0.6
     front_min = 0.6
-    speed = 0.5
-    sweet = 0.7
-    k1 = 1.0
-    k2 = 4.0
+    speed = 2.0
+    sweet = 0.6
+    k1 = 4.0*sweet/0.7
+    k2 = 4.0*sweet/0.7
+    k3 = 1.0
 
     # infinite loop
     while True:
         print right_45
-        print front_right_dist
-        print rear_right_dist
-        while right_45 < 1.0*sweet:
+        print left_45
+        #print front_right_dist
+        #print rear_right_dist
+        #if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
+            #drive(-speed,0)
+
+        while right_45 < 1.4*sweet or left_45 < 1.1*sweet:
+            print "pivoting"
             pivot_left(speed*4)
 
+        #while front_left_dist < sweet and front_right_dist < sweet:
+        #    pivot_left(speed*4)
+
         if isinf(front_right_dist):
-            front_right_dist = 2.0;
+            front_right_dist = 2.0
         if isinf(rear_right_dist):
-            rear_right_dist = 2.0;
-        omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
+            rear_right_dist = 2.0
+        if isinf(right_45):
+            right_45 = 2.0
+        if isinf(left_45):
+            left_45 = 2.0
+
+        
+        if front_right_dist == 2.0 and rear_right_dist == 2.0:
+            omega = 0
+        #elif front_left_dist < 1.5 and front_right_dist < 1.5:
+        #    omega = k3*(front_left_dist - front_right_dist)
+        else:
+            omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
         #omega =  - k2 * (front_right_dist - rear_right_dist)
         #omega = 1
         drive(speed,omega)
