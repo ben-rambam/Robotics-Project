@@ -7,6 +7,7 @@ from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import MultiArrayLayout
 from std_msgs.msg import MultiArrayDimension
 from enum import Enum
+from math import *
 
 State = Enum('State', 'go_away pivot_right go_to pivot_left')
 
@@ -23,6 +24,7 @@ beacon_pose.theta = -180
 
 front_right_dist = 2.0
 rear_right_dist = 2.0
+right_45 = 2.0
 r = 0.12
 L = 0.35
 
@@ -93,9 +95,11 @@ def beacon_callback(beacon_data):
 def lidar_callback(lidar_data):
     global laser_scan
     global rear_right_dist, front_right_dist
+    global right_45
     laser_scan = lidar_data
-    rear_right_dist = laser_scan.ranges[45]
-    front_right_dist = laser_scan.ranges[135]
+    rear_right_dist = laser_scan.ranges[85]
+    front_right_dist = laser_scan.ranges[95]
+    right_45 = laser_scan.ranges[135]
 
 
 #print laser_scan.header
@@ -160,8 +164,22 @@ def pivot_right(speed):
         data.data = [w1, w2, r, L]
         pub.publish(data)
 
+def drive(v,omega):
+    global r, L
+    w1 = 1 / r * (v + L * omega)
+    w2 = 1 / r * (v - L * omega)
+    data = Float64MultiArray(data=[])
+    data.layout = MultiArrayLayout()
+    data.layout.dim = [MultiArrayDimension()]
+    data.layout.dim[0].label = "Parameters"
+    data.layout.dim[0].size = 4
+    data.layout.dim[0].stride = 1
+    data.data = [w1, w2, r, L]
+    pub.publish(data)
+
 def listener():
     global pub
+    global right_45, front_right_dist, rear_right_dist
     #create the node
     rospy.init_node('read_sensors', anonymous=True)
     #create the subscribers
@@ -171,55 +189,74 @@ def listener():
     rospy.Subscriber("/robot0/laser_0", LaserScan, lidar_callback)
 
     state = State.go_to
-    rear_max = 1.5
-    front_max = 1.5
-    rear_min = 1.0
-    front_min = 1.0
-    speed = 1
+    rear_max = 0.7
+    front_max = 0.7
+    rear_min = 0.6
+    front_min = 0.6
+    speed = 0.5
+    sweet = 0.7
+    k1 = 1.0
+    k2 = 4.0
 
     # infinite loop
     while True:
-        
-        if state == State.go_away:
-            if rear_right_dist > rear_max:
-                state = State.pivot_right
-                print "go_away -> pivot_right"
-                print "rear: " 
-                print rear_right_dist
-                print "front: " 
-                print front_right_dist
-            else:
-                drive_straight(speed)
-        elif state == State.pivot_right:
-            if front_right_dist < front_max:
-                state = State.go_to
-                print "pivot_right -> go_to"
-                print "rear: " 
-                print rear_right_dist
-                print "front: " 
-                print front_right_dist
-            else:
-                pivot_right(speed)
-        elif state == State.go_to:
-            if front_right_dist < front_min:
-                state = State.pivot_left
-                print "go_to -> pivot_left"
-                print "rear: " 
-                print rear_right_dist
-                print "front: " 
-                print front_right_dist
-            else:
-                drive_straight(speed)
-        elif state == State.pivot_left:
-            if rear_right_dist < rear_min:
-                state = State.go_away
-                print "pivot_left -> go away"
-                print "rear: " 
-                print rear_right_dist
-                print "front: " 
-                print front_right_dist
-            else:
-                pivot_left(speed)
+        print right_45
+        print front_right_dist
+        print rear_right_dist
+        while right_45 < 1.0*sweet:
+            pivot_left(speed*4)
+
+        if isinf(front_right_dist):
+            front_right_dist = 2.0;
+        if isinf(rear_right_dist):
+            rear_right_dist = 2.0;
+        omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
+        #omega =  - k2 * (front_right_dist - rear_right_dist)
+        #omega = 1
+        drive(speed,omega)
+
+
+
+#        if state == State.go_away:
+#            if rear_right_dist > rear_max:
+#                state = State.pivot_right
+#                print "go_away -> pivot_right"
+#                print "rear: " 
+#                print rear_right_dist
+#                print "front: " 
+#                print front_right_dist
+#            else:
+#                drive_straight(speed)
+#        elif state == State.pivot_right:
+#            if (front_right_dist - rear_right_dist) < 0.1*front_right_dist
+#                state = State.go_to
+#                print "pivot_right -> go_to"
+#                print "rear: " 
+#                print rear_right_dist
+#                print "front: " 
+#                print front_right_dist
+#            else:
+#                pivot_right(speed)
+#        elif state == State.go_to:
+#            if front_right_dist < front_min:
+#                state = State.pivot_left
+#                print "go_to -> pivot_left"
+#                print "rear: " 
+#                print rear_right_dist
+#                print "front: " 
+#                print front_right_dist
+#            else:
+#                drive_straight(speed)
+#        elif state == State.pivot_left:
+#            if rear_right_dist < rear_min:
+#                state = State.go_away
+#                print "pivot_left -> go away"
+#                print "rear: " 
+#                print rear_right_dist
+#                print "front: " 
+#                print front_right_dist
+#            else:
+#                pivot_left(speed)
 
 
     # spin() simply keeps python from exiting until this node is stopped
