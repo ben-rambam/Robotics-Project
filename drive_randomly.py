@@ -97,6 +97,7 @@ def beacon_callback(beacon_data):
 
 #Reads in the laser message sent on robot0/laser_0 topic
 def lidar_callback(lidar_data):
+    print "got laser"
     global laser_scan
     global rear_right_dist, front_right_dist, right_45
     global rear_left_dist, front_left_dist, left_45
@@ -154,6 +155,9 @@ def drive(v,omega):
 
 t = 0.0
 def dt_callback( dt_data ):
+    global pub
+    global right_45, front_right_dist, rear_right_dist
+    global left_45
     global r, L, w1, w2
     global t
     data = Float64MultiArray(data=[])
@@ -165,13 +169,23 @@ def dt_callback( dt_data ):
     data.data = [w1, w2, r, L]
     pub.publish(data)
 
-    t = t + dt_data.data
-    if t < 5.0:
-        drive(1,0)
-    elif t < 10.0:
-        drive(0,0.314)
-    else:
-        t = 0.0
+    state = State.go_to
+    rear_max = 0.7
+    front_max = 0.7
+    rear_min = 0.6
+    front_min = 0.6
+    speed = 0.5
+    sweet = 0.6
+    k1 = 4.0*sweet/0.7
+    k2 = 4.0*sweet/0.7
+    k3 = 1.0
+    #t = t + dt_data.data
+    #if t < 5.0:
+    #    drive(1,0)
+    #elif t < 10.0:
+    #    drive(0,0.314)
+    #else:
+    #    t = 0.0
 
     #elif t < 10.0:
     #    drive(0,0.314)
@@ -193,40 +207,43 @@ def dt_callback( dt_data ):
 
 
     
-    #print right_45
-    #print left_45
-    ##print front_right_dist
-    ##print rear_right_dist
-    ##if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
-    #    #drive(-speed,0)
+    pivoting = False
+    print right_45
+    print left_45
+    #print front_right_dist
+    #print rear_right_dist
+    #if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
+        #drive(-speed,0)
 
-    #while right_45 < 1.3*sweet or left_45 < 1.1*sweet:
-    #    print "pivoting"
+    if right_45 < 1.3*sweet or left_45 < 1.1*sweet:
+        print "pivoting"
+        pivoting = True
+        pivot_left(speed*4)
+
+    #while front_left_dist < sweet and front_right_dist < sweet:
     #    pivot_left(speed*4)
 
-    ##while front_left_dist < sweet and front_right_dist < sweet:
-    ##    pivot_left(speed*4)
+    if isinf(front_right_dist):
+        front_right_dist = 2.0
+    if isinf(rear_right_dist):
+        rear_right_dist = 2.0
+    if isinf(right_45):
+        right_45 = 2.0
+    if isinf(left_45):
+        left_45 = 2.0
 
-    #if isinf(front_right_dist):
-    #    front_right_dist = 2.0
-    #if isinf(rear_right_dist):
-    #    rear_right_dist = 2.0
-    #if isinf(right_45):
-    #    right_45 = 2.0
-    #if isinf(left_45):
-    #    left_45 = 2.0
-
-    #
-    #if front_right_dist == 2.0 and rear_right_dist == 2.0:
-    #    omega = 0
-    ##elif front_left_dist < 1.5 and front_right_dist < 1.5:
-    ##    omega = k3*(front_left_dist - front_right_dist)
-    #else:
-    #    omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
-    ##omega =  - k2 * (front_right_dist - rear_right_dist)
-    ##omega = 1
-    ##drive(speed,omega)
+    
+    if front_right_dist == 2.0 and rear_right_dist == 2.0:
+        omega = 0
+    #elif front_left_dist < 1.5 and front_right_dist < 1.5:
+    #    omega = k3*(front_left_dist - front_right_dist)
+    else:
+        omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
+    #omega =  - k2 * (front_right_dist - rear_right_dist)
+    #omega = 1
     #drive(speed,omega)
+    if pivoting == False:
+        drive(speed,omega)
     #w1 = 15
     #w2 = -15
     #data = Float64MultiArray(data=[])
