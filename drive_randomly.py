@@ -35,8 +35,7 @@ L = 0.35
 laser_scan = LaserScan()
 
 #creat the wheel-speed publisher
-pub = rospy.Publisher(
-    'robot0/kinematic_params', Float64MultiArray, queue_size=10)
+pub = rospy.Publisher( 'robot0/kinematic_params', Float64MultiArray, queue_size=10)
 
 
 #Get the sensor reading on the left wheel velocity
@@ -132,48 +131,27 @@ def follow_wall_right():
         forward_index_right = 225
 
 def drive_straight(speed):
-        global r, L
-        w1 = speed
-        w2 = speed
-        data = Float64MultiArray(data=[])
-        data.layout = MultiArrayLayout()
-        data.layout.dim = [MultiArrayDimension()]
-        data.layout.dim[0].label = "Parameters"
-        data.layout.dim[0].size = 4
-        data.layout.dim[0].stride = 1
-        data.data = [w1, w2, r, L]
-        pub.publish(data)
+    global r, L, w1, w2
+    w1 = speed
+    w2 = speed
 
 def pivot_left(speed):
-        global r, L
-        w1 = speed
-        w2 = -speed
-        data = Float64MultiArray(data=[])
-        data.layout = MultiArrayLayout()
-        data.layout.dim = [MultiArrayDimension()]
-        data.layout.dim[0].label = "Parameters"
-        data.layout.dim[0].size = 4
-        data.layout.dim[0].stride = 1
-        data.data = [w1, w2, r, L]
-        pub.publish(data)
+    global r, L, w1, w2
+    w1 = speed
+    w2 = -speed
 
 def pivot_right(speed):
-        global r, L
-        w1 = -speed
-        w2 = speed
-        data = Float64MultiArray(data=[])
-        data.layout = MultiArrayLayout()
-        data.layout.dim = [MultiArrayDimension()]
-        data.layout.dim[0].label = "Parameters"
-        data.layout.dim[0].size = 4
-        data.layout.dim[0].stride = 1
-        data.data = [w1, w2, r, L]
-        pub.publish(data)
+    global r, L, w1, w2
+    w1 = -speed
+    w2 = speed
 
 def drive(v,omega):
-    global r, L
+    global r, L, w1, w2
     w1 = 1 / r * (v + L * omega)
     w2 = 1 / r * (v - L * omega)
+
+def dt_callback( dt_data ):
+    global r, L, w1, w2
     data = Float64MultiArray(data=[])
     data.layout = MultiArrayLayout()
     data.layout.dim = [MultiArrayDimension()]
@@ -188,19 +166,20 @@ def listener():
     global right_45, front_right_dist, rear_right_dist
     global left_45
     #create the node
-    rospy.init_node('read_sensors', anonymous=True)
+    rospy.init_node('drive_randomly', anonymous=True)
     #create the subscribers
     rospy.Subscriber("/robot0/left_wheel", Float64, lw_callback)
     rospy.Subscriber("/robot0/right_wheel", Float64, rw_callback)
     rospy.Subscriber("/robot0/beacon", Pose2D, beacon_callback)
     rospy.Subscriber("/robot0/laser_0", LaserScan, lidar_callback)
+    rospy.Subscriber("/robot0/dt", Float64, dt_callback)
 
     state = State.go_to
     rear_max = 0.7
     front_max = 0.7
     rear_min = 0.6
     front_min = 0.6
-    speed = 2.0
+    speed = 0.25 
     sweet = 0.6
     k1 = 4.0*sweet/0.7
     k2 = 4.0*sweet/0.7
@@ -215,7 +194,7 @@ def listener():
         #if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
             #drive(-speed,0)
 
-        while right_45 < 1.4*sweet or left_45 < 1.1*sweet:
+        while right_45 < 1.3*sweet or left_45 < 1.1*sweet:
             print "pivoting"
             pivot_left(speed*4)
 
@@ -241,6 +220,17 @@ def listener():
         #omega =  - k2 * (front_right_dist - rear_right_dist)
         #omega = 1
         drive(speed,omega)
+        #w1 = 15
+        #w2 = -15
+        #data = Float64MultiArray(data=[])
+        #data.layout = MultiArrayLayout()
+        #data.layout.dim = [MultiArrayDimension()]
+        #data.layout.dim[0].label = "Parameters"
+        #data.layout.dim[0].size = 4
+        #data.layout.dim[0].stride = 1
+        #data.data = [w1, w2, r, L]
+        #pub.publish(data)
+        
 
 
 
