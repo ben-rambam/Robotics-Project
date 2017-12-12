@@ -23,7 +23,7 @@ dt = 0.1
 
 
 r = 0.12
-L = 0.35
+L = 0.175
 
 #Pose2D (x, y, theta) for beacon location relative to robot location
 beacon_found = False
@@ -50,10 +50,6 @@ def rw_callback( rw_data ):
 	rw_vel = rw_data.data
 	#print rw_vel
 
-def omega_callback( omega_data ):
-    global wcom1, wcom2
-    wcom1 = omega_data.data[0]
-    wcom2 = omega_data.data[1]
 
 
 #Read the beacon sensor. If theta is not between -90, 90 degrees beacon is not found
@@ -76,9 +72,157 @@ def pose_callback( pose_data ):
     xreal[1] = pose_data.y
     xreal[2] = pose_data.theta
 
-def dt_callback(dt_data ):
+def f(x, u, r, L, dt):
+    #print x
+
+    #print u
+    f = np.matrix([ [x[0,0] + r*dt/2.0*(x[3,0] + x[4,0])*cos(x[2])],
+                    [x[1,0] + r*dt/2.0*(x[3,0] + x[4,0])*sin(x[2])],
+                    [x[2,0] + r*dt/2.0/L*(x[3,0] - x[4,0])],
+                    [u[0,0] ],
+                    [u[1,0] ]])
+    #f = np.matrix([ [x[0,0] + r*dt/2.0*(u[0,0] + u[1,0])*cos(x[2])],
+    #                [x[1,0] + r*dt/2.0*(u[0,0] + u[1,0])*sin(x[2])],
+    #                [x[2,0] + r*dt/2.0/L*(u[0,0] - u[1,0])],
+    #                [u[0,0] ],
+    #                [u[1,0] ]])
+    return f
+
+
+def F(x, u, r, L, dt):
+    F = np.array([  [1, 0, -r*dt/2.0*(x[3,0] + x[4,0])*sin(x[2]), r*dt/2*cos(x[2,0]), r*dt/2*cos(x[2,0])],
+                    [0, 1, r*dt/2.0*(x[3,0] + x[4,0])*cos(x[2]), r*dt/2*sin(x[2,0]), r*dt/2*sin(x[2,0])],
+                    [0, 0, 1, r*dt/2.0/L, -r*dt/2.0/L],
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0]])
+    return F
+
+def h(x, u, r, L, dr):
+    h = np.array([[x[3,0]],[x[4,0]]])
+    return h
+
+H = np.matrix([  [0,0,0,1,0],
+                [0,0,0,0,1]])
+
+count = 0
+
+xvec = []
+yvec = []
+
+thetavec = []
+xrealvec = []
+yrealvec = []
+thetarealvec = []
+
+#x = np.matrix([[44.0],[111.0],[4.0],[0.0],[0.0]])
+x = np.matrix([[15.0],[15.0],[-0.3927],[0.0],[0.0]])
+xvec.append(x[0,0])
+yvec.append(x[1,0])
+thetavec.append(x[2,0])
+#xprev = np.matrix([[44.0],[111.0],[4.0],[0.0],[0.0],[0.0]])
+xprev = np.matrix([[15.0],[15.0],[-0.3927],[0.0],[0.0]])
+
+#xreal = np.matrix([[44.0],[111.0],[4.0]])
+xreal = np.matrix([[1.0],[2.0],[0.0]])
+xrealvec.append(xreal[0,0])
+yrealvec.append(xreal[1,0])
+thetarealvec.append(xreal[2,0])
+
+#np.append(xvec,x,0)
+#np.append(xrealvec,xreal,0)
+u = np.matrix([[0.0],[0.0]])
+Pprev = np.matrix([ [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0] ])
+
+P = np.eye(5)
+#P = np.matrix([ [0,0,0,0,0],
+#                [0,0,0,0,0],
+#                [0,0,0,0,0],
+#                [0,0,0,0,0],
+#                [0,0,0,0,0]])
+
+proc_var = 10000.0
+V = ([  [7.2e-7 ,   0.0,    0.0,    6.0e-5,     6.0e-5],
+        [0.0    ,   0.0,    0.0,    0.0,        0.0],
+        [0.0    ,   0.0,    5.9e-6, 1.7e-4,     0.0],
+        [6.0e-5 ,   0.0,    1.7e-4, 1.0e-2,     -1.7e-5],
+        [6.0e-5,    0.0,    0.0,    -1.7e-5,    1.0e-2]])
+
+#V = ([  [proc_var ,0,0,0,0],
+#        [0,proc_var ,0,0,0],
+#        [0,0,proc_var ,0,0],
+#        [0,0,0,proc_var,0],
+#        [0,0,0,0,proc_var]])
+        #[0,proc_var,0,0,0],
+        #[0,0,proc_var,0,0],
+        #[0,0,0,proc_var,0],
+        #[0,0,0,0,proc_var]])
+
+W = ([  [0.05**2,0],
+        [0,0.05**2]])
+def dt_callback(dt_data):
     global dt
     dt = dt_data.data
+
+
+def omega_callback( omega_data ):
+    global wcom1, wcom2
+    global xreal
+    global r, L, dt
+    global rw_vel, lw_vel
+    global count
+    global dt
+    global x, xprev, u
+    global P
+    wcom1 = omega_data.data[0]
+    wcom2 = omega_data.data[1]
+    count = count+1
+# project previous state forward one time step
+    #print x[0].shape
+    #print xprev.shape
+    u[0,0] = wcom1
+    u[1,0] = wcom2
+    x = f(xprev,u,r,L,dt)
+    P = np.dot(np.dot(F(x,u,r,L,dt),P),F(x,u,r,L,dt).T) + V
+    K = np.linalg.solve((np.dot(H, np.dot(P, H.T)) + W).T, np.dot(H,P.T)).T
+    #print K
+    z = np.matrix([[rw_vel],[lw_vel]])
+    #print dt
+    #print z
+    #print h(x,u,r,L,dt)
+    #print "right, left"
+    #print rw_vel
+    #print lw_vel
+    x = x + np.dot(K, z - h(x,u,r,L,dt))
+    temp = P
+    P = np.dot(np.eye(5) - np.dot(K, H), temp)
+    xprev = x
+
+    #print x
+    #print rw_vel
+    #uprev[0] = rw_vel
+    #uprev[1] = lw_vel
+    #np.append(xvec,x,0)
+    #xvec.append(x)
+    #np.append(xrealvec,xreal,0)
+    #xrealvec.append(xreal)
+
+    if count % 5 == 0:
+        print "saved point"
+        xvec.append(x[0,0])
+        yvec.append(x[1,0])
+        thetavec.append(x[2,0])
+        xrealvec.append(xreal[0,0])
+        yrealvec.append(xreal[1,0])
+        thetarealvec.append(xreal[2,0])
+
+    if count % 100 == 0:
+        plt.plot(xvec,yvec,'go')
+        plt.plot(xrealvec,yrealvec,'b')
+        plt.show()
 # update state using physics
 
 
@@ -146,35 +290,6 @@ def lidar_callback( lidar_data ):
 #    return H
 #
 #H = np.matrix([[1, 0, 0], [0, 1, 0]])
-def f(x, u, r, L, dt):
-    #print x
-
-    #print u
-    f = np.matrix([ [x[0,0] + r*dt/2.0*(x[3,0] + x[4,0])*cos(x[2])],
-                    [x[1,0] + r*dt/2.0*(x[3,0] + x[4,0])*sin(x[2])],
-                    [x[2,0] + r*dt/2.0/L*(x[3,0] - x[4,0])],
-                    [x[3,0] ],
-                    [x[4,0] ]])
-    return f
-
-
-def F(x, u, r, L, dt):
-    F = np.array([  [1, 0, -r*dt/2*(x[3,0] + x[4,0])*sin(x[2]), r*dt/2*cos(x[2,0]), r*dt/2*cos(x[2,0])],
-                    [0, 1, r*dt/2*(x[3,0] + x[4,0])*cos(x[2]), r*dt/2*sin(x[2,0]), r*dt/2*sin(x[2,0])],
-                    [0, 0, 1, r*dt/2/L, -r*dt/2/L],
-                    [0, 0, 0, 1, 0],
-                    [0, 0, 0, 0, 1]])
-    return F
-
-def h(x, u, r, L, dr):
-    h = np.array([[x[3,0]],[x[4,0]],[x[3,0]],[x[4,0]]])
-    return h
-
-H = np.matrix([  [0,0,0,1,0],
-                [0,0,0,0,1],
-                [0,0,0,1,0],
-                [0,0,0,0,1]])
-
     
 def listener():
     global xreal
@@ -184,14 +299,6 @@ def listener():
 	#create the node
 	#create the node
     rospy.init_node('read_sensors', anonymous=True)
-	#create the subscribers
-    rospy.Subscriber("/robot0/left_wheel",Float64,rw_callback)
-    rospy.Subscriber("/robot0/right_wheel",Float64,lw_callback)
-    rospy.Subscriber("/robot0/beacon",Pose2D, beacon_callback)
-    rospy.Subscriber("/robot0/laser_0",LaserScan, lidar_callback) 
-    rospy.Subscriber("/robot0/dt",Float64, dt_callback) 
-    rospy.Subscriber("/robot0/pose2D",Pose2D, pose_callback) 
-    rospy.Subscriber("/robot0/kinematic_params", Float64MultiArray, omega_callback)
 
     #xvec = np.ndarray(shape=(1,3,1))
     #xrealvec = np.ndarray(shape=(1,3,1))
@@ -219,7 +326,7 @@ def listener():
 
     #np.append(xvec,x,0)
     #np.append(xrealvec,xreal,0)
-    uprev = np.matrix([[0.0]])
+    u = np.matrix([[0.0],[0.0]])
     Pprev = np.matrix([ [0,0,0,0,0],
                         [0,0,0,0,0],
                         [0,0,0,0,0],
@@ -234,71 +341,82 @@ def listener():
     #                [0,0,0,0,0]])
 
     proc_var = 10000.0
-    V = ([  [proc_var ,0,0,0,0],
-            [0,proc_var ,0,0,0],
-            [0,0,proc_var ,0,0],
-            [0,0,0,proc_var,0],
-            [0,0,0,0,proc_var]])
+    V = ([  [7.2e-7 ,   0.0,    0.0,    6.0e-5,     6.0e-5],
+            [0.0    ,   0.0,    0.0,    0.0,        0.0],
+            [0.0    ,   0.0,    5.9e-6, 1.7e-4,     0.0],
+            [6.0e-5 ,   0.0,    1.7e-4, 1.0e-2,     -1.7e-5],
+            [6.0e-5,    0.0,    0.0,    -1.7e-5,    1.0e-2]])
+
+    #V = ([  [proc_var ,0,0,0,0],
+    #        [0,proc_var ,0,0,0],
+    #        [0,0,proc_var ,0,0],
+    #        [0,0,0,proc_var,0],
+    #        [0,0,0,0,proc_var]])
             #[0,proc_var,0,0,0],
             #[0,0,proc_var,0,0],
             #[0,0,0,proc_var,0],
             #[0,0,0,0,proc_var]])
 
-    W = ([  [0.1**2,0,0,0],
-            [0,0.1**2,0,0],
-            [0,0,0.05**2,0],
-            [0,0,0,0.05**2]])
-
-
-
-    count = 0
-    while True:
-        count = count+1
-# project previous state forward one time step
-        #print x[0].shape
-        #print xprev.shape
-        x = f(xprev,uprev,r,L,dt)
-        P = np.dot(np.dot(F(x,uprev,r,L,dt),P),F(x,uprev,r,L,dt).T) + V
-        K = np.linalg.solve((np.dot(H, np.dot(P, H.T)) + W).T, np.dot(H,P.T)).T
-        #print K
-        z = np.matrix([[wcom1],[wcom2],[rw_vel],[lw_vel]])
-        print dt
-        #print z
-        #print h(x,uprev,r,L,dt)
-        #print "right, left"
-        #print rw_vel
-        #print lw_vel
-        x = x + np.dot(K, z - h(x,uprev,r,L,dt))
-        temp = P
-        P = np.dot(np.eye(5) - np.dot(K, H), temp)
-        xprev = x
-
-        #print x
-        #print rw_vel
-        #uprev[0] = rw_vel
-        #uprev[1] = lw_vel
-        #np.append(xvec,x,0)
-        #xvec.append(x)
-        #np.append(xrealvec,xreal,0)
-        #xrealvec.append(xreal)
-
-        if count % 10 == 0:
-            print "saved point"
-            xvec.append(x[0,0])
-            yvec.append(x[1,0])
-            thetavec.append(x[2,0])
-            xrealvec.append(xreal[0,0])
-            yrealvec.append(xreal[1,0])
-            thetarealvec.append(xreal[2,0])
-
-        if count % 1000 == 0:
-            plt.plot(xvec,yvec,'go')
-            plt.plot(xrealvec,yrealvec,'b')
-            plt.show()
-# 
+    W = ([  [0.05**2,0],
+            [0,0.05**2]])
+	#create the subscribers
+    rospy.Subscriber("/robot0/left_wheel",Float64,rw_callback)
+    rospy.Subscriber("/robot0/right_wheel",Float64,lw_callback)
+    rospy.Subscriber("/robot0/beacon",Pose2D, beacon_callback)
+    rospy.Subscriber("/robot0/laser_0",LaserScan, lidar_callback) 
+    rospy.Subscriber("/robot0/dt",Float64, dt_callback) 
+    rospy.Subscriber("/robot0/pose2D",Pose2D, pose_callback) 
+    rospy.Subscriber("/robot0/kinematic_params", Float64MultiArray, omega_callback)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
+
+    #while True:
+    #    count = count+1
+# pr#oject previous state forward one time step
+    #    #print x[0].shape
+    #    #print xprev.shape
+    #    u[0,0] = wcom1
+    #    u[1,0] = wcom2
+    #    x = f(xprev,u,r,L,dt)
+    #    P = np.dot(np.dot(F(x,u,r,L,dt),P),F(x,u,r,L,dt).T) + V
+    #    K = np.linalg.solve((np.dot(H, np.dot(P, H.T)) + W).T, np.dot(H,P.T)).T
+    #    #print K
+    #    z = np.matrix([[rw_vel],[lw_vel]])
+    #    #print dt
+    #    print z
+    #    print h(x,u,r,L,dt)
+    #    #print "right, left"
+    #    #print rw_vel
+    #    #print lw_vel
+    #    x = x + np.dot(K, z - h(x,u,r,L,dt))
+    #    temp = P
+    #    P = np.dot(np.eye(5) - np.dot(K, H), temp)
+    #    xprev = x
+
+    #    #print x
+    #    #print rw_vel
+    #    #uprev[0] = rw_vel
+    #    #uprev[1] = lw_vel
+    #    #np.append(xvec,x,0)
+    #    #xvec.append(x)
+    #    #np.append(xrealvec,xreal,0)
+    #    #xrealvec.append(xreal)
+
+    #    if count % 10 == 0:
+    #        print "saved point"
+    #        xvec.append(x[0,0])
+    #        yvec.append(x[1,0])
+    #        thetavec.append(x[2,0])
+    #        xrealvec.append(xreal[0,0])
+    #        yrealvec.append(xreal[1,0])
+    #        thetarealvec.append(xreal[2,0])
+
+    #    if count % 1000 == 0:
+    #        plt.plot(xvec,yvec,'go')
+    #        plt.plot(xrealvec,yrealvec,'b')
+    #        plt.show()
+# 
 
 	#use sleep instead and use a while ros ok loop if you want to grab everything then do a computation 
 	#and publish a message based on all subscribers

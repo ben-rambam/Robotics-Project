@@ -29,7 +29,9 @@ left_45 = 2.0
 rear_left_dist = 2.0
 front_left_dist = 2.0
 r = 0.12
-L = 0.35
+L = 0.175
+w1 = 0.0
+w2 = 0.0
 
 #LaserScan information on the robot laserscan taopic
 laser_scan = LaserScan()
@@ -150,8 +152,10 @@ def drive(v,omega):
     w1 = 1 / r * (v + L * omega)
     w2 = 1 / r * (v - L * omega)
 
+t = 0.0
 def dt_callback( dt_data ):
     global r, L, w1, w2
+    global t
     data = Float64MultiArray(data=[])
     data.layout = MultiArrayLayout()
     data.layout.dim = [MultiArrayDimension()]
@@ -160,6 +164,79 @@ def dt_callback( dt_data ):
     data.layout.dim[0].stride = 1
     data.data = [w1, w2, r, L]
     pub.publish(data)
+
+    t = t + dt_data.data
+    if t < 5.0:
+        drive(1,0)
+    elif t < 10.0:
+        drive(0,0.314)
+    else:
+        t = 0.0
+
+    #elif t < 10.0:
+    #    drive(0,0.314)
+    #elif t < 15.0:
+    #    drive(1,0)
+    #elif t < 20.0:
+    #    drive(0,0.314)
+    #elif t < 25.0:
+    #    drive(1,0)
+    #elif t < 30.0:
+    #    drive(0,0.314)
+    #elif t < 35.0:
+    #    drive(1,0)
+    #elif t < 40.0:
+    #    drive(0,0.314)
+    #elif t < 45.0:
+    #    t = 0.0
+
+
+
+    
+    #print right_45
+    #print left_45
+    ##print front_right_dist
+    ##print rear_right_dist
+    ##if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
+    #    #drive(-speed,0)
+
+    #while right_45 < 1.3*sweet or left_45 < 1.1*sweet:
+    #    print "pivoting"
+    #    pivot_left(speed*4)
+
+    ##while front_left_dist < sweet and front_right_dist < sweet:
+    ##    pivot_left(speed*4)
+
+    #if isinf(front_right_dist):
+    #    front_right_dist = 2.0
+    #if isinf(rear_right_dist):
+    #    rear_right_dist = 2.0
+    #if isinf(right_45):
+    #    right_45 = 2.0
+    #if isinf(left_45):
+    #    left_45 = 2.0
+
+    #
+    #if front_right_dist == 2.0 and rear_right_dist == 2.0:
+    #    omega = 0
+    ##elif front_left_dist < 1.5 and front_right_dist < 1.5:
+    ##    omega = k3*(front_left_dist - front_right_dist)
+    #else:
+    #    omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
+    ##omega =  - k2 * (front_right_dist - rear_right_dist)
+    ##omega = 1
+    ##drive(speed,omega)
+    #drive(speed,omega)
+    #w1 = 15
+    #w2 = -15
+    #data = Float64MultiArray(data=[])
+    #data.layout = MultiArrayLayout()
+    #data.layout.dim = [MultiArrayDimension()]
+    #data.layout.dim[0].label = "Parameters"
+    #data.layout.dim[0].size = 4
+    #data.layout.dim[0].stride = 1
+    #data.data = [w1, w2, r, L]
+    #pub.publish(data)
 
 def listener():
     global pub
@@ -179,57 +256,61 @@ def listener():
     front_max = 0.7
     rear_min = 0.6
     front_min = 0.6
-    speed = 0.25 
+    speed = 0.5
     sweet = 0.6
     k1 = 4.0*sweet/0.7
     k2 = 4.0*sweet/0.7
     k3 = 1.0
 
     # infinite loop
-    while True:
-        print right_45
-        print left_45
-        #print front_right_dist
-        #print rear_right_dist
-        #if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
-            #drive(-speed,0)
+    rospy.spin()
+    #while True:
+    #    drive(2.0,0.0)
+    #    
+    #    print right_45
+    #    print left_45
+    #    #print front_right_dist
+    #    #print rear_right_dist
+    #    #if right_45 < 1.3*sweet or left_45 < 1.3*sweet:
+    #        #drive(-speed,0)
 
-        while right_45 < 1.3*sweet or left_45 < 1.1*sweet:
-            print "pivoting"
-            pivot_left(speed*4)
+    #    while right_45 < 1.3*sweet or left_45 < 1.1*sweet:
+    #        print "pivoting"
+    #        pivot_left(speed*4)
 
-        #while front_left_dist < sweet and front_right_dist < sweet:
-        #    pivot_left(speed*4)
+    #    #while front_left_dist < sweet and front_right_dist < sweet:
+    #    #    pivot_left(speed*4)
 
-        if isinf(front_right_dist):
-            front_right_dist = 2.0
-        if isinf(rear_right_dist):
-            rear_right_dist = 2.0
-        if isinf(right_45):
-            right_45 = 2.0
-        if isinf(left_45):
-            left_45 = 2.0
+    #    if isinf(front_right_dist):
+    #        front_right_dist = 2.0
+    #    if isinf(rear_right_dist):
+    #        rear_right_dist = 2.0
+    #    if isinf(right_45):
+    #        right_45 = 2.0
+    #    if isinf(left_45):
+    #        left_45 = 2.0
 
-        
-        if front_right_dist == 2.0 and rear_right_dist == 2.0:
-            omega = 0
-        #elif front_left_dist < 1.5 and front_right_dist < 1.5:
-        #    omega = k3*(front_left_dist - front_right_dist)
-        else:
-            omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
-        #omega =  - k2 * (front_right_dist - rear_right_dist)
-        #omega = 1
-        drive(speed,omega)
-        #w1 = 15
-        #w2 = -15
-        #data = Float64MultiArray(data=[])
-        #data.layout = MultiArrayLayout()
-        #data.layout.dim = [MultiArrayDimension()]
-        #data.layout.dim[0].label = "Parameters"
-        #data.layout.dim[0].size = 4
-        #data.layout.dim[0].stride = 1
-        #data.data = [w1, w2, r, L]
-        #pub.publish(data)
+    #    
+    #    if front_right_dist == 2.0 and rear_right_dist == 2.0:
+    #        omega = 0
+    #    #elif front_left_dist < 1.5 and front_right_dist < 1.5:
+    #    #    omega = k3*(front_left_dist - front_right_dist)
+    #    else:
+    #        omega = -k1*(min(front_right_dist,rear_right_dist)-sweet) - k2 * (front_right_dist - rear_right_dist)
+    #    #omega =  - k2 * (front_right_dist - rear_right_dist)
+    #    #omega = 1
+    #    #drive(speed,omega)
+    #    drive(speed,omega)
+    #    #w1 = 15
+    #    #w2 = -15
+    #    #data = Float64MultiArray(data=[])
+    #    #data.layout = MultiArrayLayout()
+    #    #data.layout.dim = [MultiArrayDimension()]
+    #    #data.layout.dim[0].label = "Parameters"
+    #    #data.layout.dim[0].size = 4
+    #    #data.layout.dim[0].stride = 1
+    #    #data.data = [w1, w2, r, L]
+    #    #pub.publish(data)
         
 
 
